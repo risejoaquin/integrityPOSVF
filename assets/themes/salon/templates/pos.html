@@ -1,0 +1,27 @@
+{{define "pos.html"}} {{template "base.html" .}} {{end}} {{define "content"}}
+<div class="pos-container" style="background: #fdfbfb">
+  <header class="pos-header" style="background: #8e44ad">
+    <h1>{{.Config.BusinessInfo.Name}} - Beauty Salon</h1>
+  </header>
+  <div class="pos-main">
+    <div class="menu-section" id="menu-section"></div>
+    <div class="sidebar">
+      <div class="cart-section">
+        <h3>Servicios y Productos</h3>
+        <ul id="cart-items"></ul>
+        <div class="cart-total">Total: $<span id="cart-total">0.00</span></div>
+        <button
+          class="checkout-btn"
+          style="background: #9b59b6"
+          onclick="checkout()"
+        >
+          Cobrar Cliente
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  window.INITIAL_DATA = { products: {{.ProductsJSON}} };
+</script>
+{{end}}

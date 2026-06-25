@@ -1,0 +1,27 @@
+{{define "pos.html"}} {{template "base.html" .}} {{end}} {{define "content"}}
+<div class="pos-container" style="background: #f5f6fa">
+  <header class="pos-header" style="background: #2f3640">
+    <h1>{{.Config.BusinessInfo.Name}} - Hotel Front Desk</h1>
+  </header>
+  <div class="pos-main">
+    <div class="menu-section" id="menu-section"></div>
+    <div class="sidebar">
+      <div class="cart-section">
+        <h3>Cargos Extra / Check-out</h3>
+        <ul id="cart-items"></ul>
+        <div class="cart-total">Total: $<span id="cart-total">0.00</span></div>
+        <button
+          class="checkout-btn"
+          style="background: #353b48"
+          onclick="checkout()"
+        >
+          Cargar a Cuenta
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  window.INITIAL_DATA = { products: {{.ProductsJSON}} };
+</script>
+{{end}}

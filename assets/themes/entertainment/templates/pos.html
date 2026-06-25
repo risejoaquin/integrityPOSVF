@@ -1,0 +1,35 @@
+{{define "pos.html"}} {{template "base.html" .}} {{end}} {{define "content"}}
+<div class="pos-container" style="background: #111; color: white">
+  <header class="pos-header" style="background: #d35400">
+    <h1>{{.Config.BusinessInfo.Name}} - Entertainment/Gym</h1>
+  </header>
+  <div class="pos-main">
+    <div class="menu-section" id="menu-section" style="background: #222"></div>
+    <div
+      class="sidebar"
+      style="background: #333; color: white; border-left: 1px solid #444"
+    >
+      <div class="cart-section">
+        <h3 style="color: white">Membresías / Pases</h3>
+        <ul
+          id="cart-items"
+          style="background: #444; color: white; border-color: #555"
+        ></ul>
+        <div class="cart-total" style="color: white">
+          Total: $<span id="cart-total">0.00</span>
+        </div>
+        <button
+          class="checkout-btn"
+          style="background: #e67e22"
+          onclick="checkout()"
+        >
+          Procesar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  window.INITIAL_DATA = { products: {{.ProductsJSON}} };
+</script>
+{{end}}

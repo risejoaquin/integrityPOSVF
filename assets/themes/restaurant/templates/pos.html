@@ -1,0 +1,45 @@
+{{define "pos.html"}} {{template "base.html" .}} {{end}} {{define "content"}}
+<div class="pos-container">
+  <header class="pos-header">
+    <h1>{{.Config.BusinessInfo.Name}} - Restaurant</h1>
+    <div id="clock" style="font-size: 1.2rem; font-weight: bold"></div>
+  </header>
+  <div class="pos-main">
+    <div class="menu-section" id="menu-section"></div>
+    <div class="sidebar">
+      <div
+        class="tables-section"
+        id="tables-section"
+        style="display: {{if .Modules.tables}}block{{else}}none{{end}}; margin-bottom: 1rem;"
+      >
+        <h3 style="margin-top: 0">Mesas</h3>
+        <select
+          id="table-select"
+          style="width: 100%; padding: 0.5rem; font-size: 1rem"
+        >
+          <option value="">Seleccionar Mesa (Opcional)</option>
+        </select>
+      </div>
+      <div class="cart-section">
+        <h3 style="margin-top: 0">Orden</h3>
+        <ul id="cart-items"></ul>
+        <div class="cart-total">Total: $<span id="cart-total">0.00</span></div>
+        <button class="checkout-btn" onclick="checkout()">
+          Confirmar / Imprimir
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  window.INITIAL_DATA = {
+      products: {{.ProductsJSON}},
+      tablesActive: {{.Modules.tables}},
+      loyaltyActive: {{.Modules.loyalty}}
+  };
+  setInterval(() => {
+      const c = document.getElementById('clock');
+      if (c) c.textContent = new Date().toLocaleTimeString();
+  }, 1000);
+</script>
+{{end}}

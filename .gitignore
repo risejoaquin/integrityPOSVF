@@ -1,0 +1,29 @@
+# Binarios compilados
+bin/
+posd
+posd.exe
+builder
+builder.exe
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Configuración local (no versionar)
+config.yaml
+
+# Logs
+*.log
+
+# Archivos temporales
+tmp/
+temp/
+*.tmp
+
+# Dependencias
+vendor/
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db

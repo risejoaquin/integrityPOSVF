@@ -1,0 +1,362 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin - {{.Config.BusinessInfo.Name}}</title>
+    <link rel="stylesheet" href="/static/css/style.css" />
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: #f4f6f8;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        height: 100vh;
+      }
+      .sidebar {
+        width: 250px;
+        background: #2c3e50;
+        color: white;
+        display: flex;
+        flex-direction: column;
+      }
+      .sidebar h2 {
+        margin: 0;
+        padding: 20px;
+        background: #1a252f;
+        text-align: center;
+      }
+      .nav-item {
+        padding: 15px 20px;
+        cursor: pointer;
+        border-bottom: 1px solid #34495e;
+        transition: background 0.2s;
+      }
+      .nav-item:hover,
+      .nav-item.active {
+        background: #18bc9c;
+      }
+      .content {
+        flex: 1;
+        padding: 30px;
+        overflow-y: auto;
+      }
+      .card {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+        margin-bottom: 20px;
+      }
+      .grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+      }
+      .metric-value {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #2c3e50;
+      }
+      .metric-label {
+        color: #7f8c8d;
+        text-transform: uppercase;
+        font-size: 0.9rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #eee;
+      }
+      th {
+        color: #7f8c8d;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.85rem;
+      }
+      .btn {
+        background: #3498db;
+        color: white;
+        padding: 8px 15px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .btn:hover {
+        background: #2980b9;
+      }
+      .hidden {
+        display: none;
+      }
+      .header-flex {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="sidebar">
+      <h2>{{.Config.BusinessInfo.Name}}</h2>
+      <div class="nav-item active" onclick="showSection('dashboard')">
+        Dashboard
+      </div>
+      <div class="nav-item" onclick="showSection('reports')">Reportes</div>
+      <div class="nav-item" onclick="showSection('products')">Productos</div>
+      <div class="nav-item" onclick="showSection('customers')">Clientes</div>
+    </div>
+
+    <div class="content">
+      <!-- Dashboard Section -->
+      <div id="dashboard" class="section">
+        <h2 style="margin-top: 0">Dashboard</h2>
+        <div class="grid-3">
+          <div class="card">
+            <div class="metric-label">Ventas Hoy</div>
+            <div class="metric-value" id="dash-sales">$0.00</div>
+          </div>
+          <div class="card">
+            <div class="metric-label">Órdenes Pendientes</div>
+            <div class="metric-value" id="dash-pending">0</div>
+          </div>
+          <div class="card">
+            <div class="metric-label">Productos con Bajo Stock</div>
+            <div class="metric-value" id="dash-lowstock">0</div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Ventas de los últimos 7 días</h3>
+          <table id="daily-sales-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Órdenes</th>
+                <th>Venta Total</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Reports Section -->
+      <div id="reports" class="section hidden">
+        <div class="header-flex">
+          <h2 style="margin-top: 0">Reportes</h2>
+          <div>
+            <input type="date" id="rep-from" />
+            <input type="date" id="rep-to" />
+            <button class="btn" onclick="loadReports()">Generar</button>
+          </div>
+        </div>
+        <div class="grid-3">
+          <div class="card">
+            <div class="metric-label">Total Órdenes</div>
+            <div class="metric-value" id="rep-total-orders">0</div>
+          </div>
+          <div class="card">
+            <div class="metric-label">Ingresos Totales</div>
+            <div class="metric-value" id="rep-total-revenue">$0.00</div>
+          </div>
+          <div class="card">
+            <div class="metric-label">Ticket Promedio</div>
+            <div class="metric-value" id="rep-avg-ticket">$0.00</div>
+          </div>
+        </div>
+        <div class="grid-3">
+          <div class="card" style="grid-column: span 2">
+            <h3>Productos Más Vendidos</h3>
+            <table id="top-products-table">
+              <thead>
+                <tr>
+                  <th>Producto</th>
+                  <th>Cantidad</th>
+                  <th>Ingresos</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="card">
+            <h3>Stock Crítico</h3>
+            <table id="low-stock-table">
+              <thead>
+                <tr>
+                  <th>Producto</th>
+                  <th>Precio</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Products Section -->
+      <div id="products" class="section hidden">
+        <div class="header-flex">
+          <h2 style="margin-top: 0">Gestión de Productos</h2>
+          <button class="btn">Nuevo Producto</button>
+        </div>
+        <div class="card">
+          <table id="products-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>SKU</th>
+                <th>Precio</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Customers Section -->
+      <div id="customers" class="section hidden">
+        <div class="header-flex">
+          <h2 style="margin-top: 0">Gestión de Clientes</h2>
+          <button class="btn">Nuevo Cliente</button>
+        </div>
+        <div class="card">
+          <table id="customers-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Teléfono</th>
+                <th>Email</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const AUTH_HEADER = { Authorization: "Bearer admin-secret" };
+
+      function showSection(id) {
+        document
+          .querySelectorAll(".section")
+          .forEach((el) => el.classList.add("hidden"));
+        document
+          .querySelectorAll(".nav-item")
+          .forEach((el) => el.classList.remove("active"));
+        document.getElementById(id).classList.remove("hidden");
+        event.target.classList.add("active");
+
+        if (id === "dashboard") loadDashboard();
+        if (id === "reports") loadReports();
+        if (id === "products") loadProducts();
+        if (id === "customers") loadCustomers();
+      }
+
+      async function loadDashboard() {
+        try {
+          const res = await fetch("/api/v1/admin/dashboard", {
+            headers: AUTH_HEADER,
+          });
+          const data = await res.json();
+          document.getElementById("dash-sales").textContent =
+            `$${(data.today_sales / 100).toFixed(2)}`;
+          document.getElementById("dash-pending").textContent =
+            data.pending_orders_count;
+          document.getElementById("dash-lowstock").textContent =
+            data.low_stock_count;
+
+          const salesRes = await fetch("/api/v1/reports/daily-sales?days=7", {
+            headers: AUTH_HEADER,
+          });
+          const salesData = await salesRes.json();
+          const tbody = document.querySelector("#daily-sales-table tbody");
+          tbody.innerHTML = "";
+          (salesData || []).forEach((d) => {
+            tbody.innerHTML += `<tr><td>${d.Date}</td><td>${d.Orders}</td><td>$${(d.Revenue / 100).toFixed(2)}</td></tr>`;
+          });
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      async function loadReports() {
+        try {
+          const from = document.getElementById("rep-from").value;
+          const to = document.getElementById("rep-to").value;
+          let qs = "";
+          if (from && to) qs = `?from=${from}&to=${to}`;
+
+          const sumRes = await fetch("/api/v1/reports/sales-summary" + qs, {
+            headers: AUTH_HEADER,
+          });
+          const sumData = await sumRes.json();
+          document.getElementById("rep-total-orders").textContent =
+            sumData.TotalOrders;
+          document.getElementById("rep-total-revenue").textContent =
+            `$${(sumData.TotalRevenue / 100).toFixed(2)}`;
+          document.getElementById("rep-avg-ticket").textContent =
+            `$${(sumData.AverageTicket / 100).toFixed(2)}`;
+
+          const topRes = await fetch("/api/v1/reports/top-products" + qs, {
+            headers: AUTH_HEADER,
+          });
+          const topData = await topRes.json();
+          const tbodyTop = document.querySelector("#top-products-table tbody");
+          tbodyTop.innerHTML = "";
+          (topData || []).forEach((p) => {
+            tbodyTop.innerHTML += `<tr><td>${p.Name}</td><td>${p.Quantity}</td><td>$${(p.Revenue / 100).toFixed(2)}</td></tr>`;
+          });
+
+          const lowRes = await fetch("/api/v1/reports/low-stock?threshold=5", {
+            headers: AUTH_HEADER,
+          });
+          const lowData = await lowRes.json();
+          const tbodyLow = document.querySelector("#low-stock-table tbody");
+          tbodyLow.innerHTML = "";
+          (lowData || []).forEach((p) => {
+            tbodyLow.innerHTML += `<tr><td>${p.name}</td><td>$${(p.price_cents / 100).toFixed(2)}</td></tr>`;
+          });
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      async function loadProducts() {
+        try {
+          const res = await fetch("/api/v1/products");
+          const data = await res.json();
+          const tbody = document.querySelector("#products-table tbody");
+          tbody.innerHTML = "";
+          (data || []).forEach((p) => {
+            tbody.innerHTML += `<tr><td>${p.id}</td><td>${p.name}</td><td>${p.sku}</td><td>$${(p.price_cents / 100).toFixed(2)}</td></tr>`;
+          });
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      async function loadCustomers() {
+        try {
+          // Assuming we can get all customers or we just show a static list for now since we don't have a GET /customers all endpoint.
+          // We'll leave it empty.
+          const tbody = document.querySelector("#customers-table tbody");
+          tbody.innerHTML =
+            '<tr><td colspan="4" style="text-align:center;">Busque o añada un cliente</td></tr>';
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      document.addEventListener("DOMContentLoaded", loadDashboard);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,24 @@
+{{define "pos.html"}} {{template "base.html" .}} {{end}} {{define "content"}}
+<div class="pos-container">
+  <header class="pos-header">
+    <h1>{{.Config.BusinessInfo.Name}} POS</h1>
+  </header>
+  <div class="pos-main">
+    <div class="menu-section" id="menu-section"></div>
+    <div class="sidebar">
+      <div class="cart-section">
+        <ul id="cart-items"></ul>
+        <div class="cart-total">Total: $<span id="cart-total">0.00</span></div>
+        <button class="checkout-btn" onclick="checkout()">Cobrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  window.INITIAL_DATA = {
+      products: {{.ProductsJSON}},
+      tablesActive: {{.Modules.tables}},
+      loyaltyActive: {{.Modules.loyalty}}
+  };
+</script>
+{{end}}
