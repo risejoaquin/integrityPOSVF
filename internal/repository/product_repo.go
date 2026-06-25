@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/solidbit/integritypos/internal/model"
 )
@@ -129,17 +128,25 @@ func (r *ProductRepository) UpdateStock(ctx context.Context, tx Tx, productID st
 	query := `UPDATE products SET stock = stock + $1, updated_at=now() WHERE id = $2`
 	
 	var err error
-	var cmd pgx.CommandTag
+	var rowsAffected int64
 	if tx != nil {
-		cmd, err = tx.Exec(ctx, query, delta, productID)
+		cmd, errTx := tx.Exec(ctx, query, delta, productID)
+		err = errTx
+		if err == nil {
+			rowsAffected = cmd.RowsAffected()
+		}
 	} else {
-		cmd, err = r.Pool.Exec(ctx, query, delta, productID)
+		cmd, errPool := r.Pool.Exec(ctx, query, delta, productID)
+		err = errPool
+		if err == nil {
+			rowsAffected = cmd.RowsAffected()
+		}
 	}
 	
 	if err != nil {
 		return fmt.Errorf("error updating stock: %w", err)
 	}
-	if cmd.RowsAffected() == 0 {
+	if rowsAffected == 0 {
 		return fmt.Errorf("product with id %s not found", productID)
 	}
 	return nil
