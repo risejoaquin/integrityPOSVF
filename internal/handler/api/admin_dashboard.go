@@ -5,14 +5,13 @@ import (
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/solidbit/integritypos/internal/handler/middleware"
 )
 
 type AdminDashboardHandler struct {
 	db *pgxpool.Pool
 }
 
-func NewAdminDashboardHandler(mux *http.ServeMux, db *pgxpool.Pool, auth middleware.AuthFunc) {
+func NewAdminDashboardHandler(mux *http.ServeMux, db *pgxpool.Pool, auth func(http.Handler) http.Handler) {
 	h := &AdminDashboardHandler{db: db}
 	mux.Handle("GET /api/v1/admin/dashboard", auth(http.HandlerFunc(h.handleDashboard)))
 }

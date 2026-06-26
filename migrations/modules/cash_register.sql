@@ -1,5 +1,5 @@
 -- Migration for cash_register
-CREATE TABLE cash_registers (
+CREATE TABLE IF NOT EXISTS cash_registers (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     opened_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     closed_at TIMESTAMPTZ,

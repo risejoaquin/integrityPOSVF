@@ -1,5 +1,5 @@
 -- Migration for memberships
-CREATE TABLE memberships (
+CREATE TABLE IF NOT EXISTS memberships (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     customer_id UUID NOT NULL REFERENCES customers(id),
     plan_name TEXT NOT NULL,

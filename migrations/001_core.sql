@@ -1,7 +1,7 @@
 -- migrations/001_core.sql
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE TABLE products (
+CREATE TABLE IF NOT EXISTS products (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL,
     price_cents INTEGER NOT NULL CHECK (price_cents >= 0),
@@ -13,7 +13,7 @@ CREATE TABLE products (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE orders (
+CREATE TABLE IF NOT EXISTS orders (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     status TEXT NOT NULL DEFAULT 'pending'
         CHECK (status IN ('pending','confirmed','preparing','completed','cancelled')),
@@ -28,7 +28,7 @@ CREATE TABLE orders (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE order_items (
+CREATE TABLE IF NOT EXISTS order_items (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
     product_id UUID REFERENCES products(id) ON DELETE SET NULL,
@@ -39,7 +39,7 @@ CREATE TABLE order_items (
     customizations JSONB NOT NULL DEFAULT '{}'
 );
 
-CREATE TABLE inventory_movements (
+CREATE TABLE IF NOT EXISTS inventory_movements (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     product_id UUID NOT NULL REFERENCES products(id),
     delta INTEGER NOT NULL,
@@ -48,7 +48,7 @@ CREATE TABLE inventory_movements (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE customers (
+CREATE TABLE IF NOT EXISTS customers (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL,
     phone TEXT,
@@ -57,7 +57,7 @@ CREATE TABLE customers (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE custom_field_definitions (
+CREATE TABLE IF NOT EXISTS custom_field_definitions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     entity TEXT NOT NULL CHECK (entity IN ('product','order','customer')),
     field_name TEXT NOT NULL,
@@ -66,7 +66,7 @@ CREATE TABLE custom_field_definitions (
     display_order INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE whatsapp_messages (
+CREATE TABLE IF NOT EXISTS whatsapp_messages (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     from_number TEXT NOT NULL,
     to_number TEXT NOT NULL,
@@ -76,7 +76,7 @@ CREATE TABLE whatsapp_messages (
     timestamp TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_orders_status ON orders(status);
-CREATE INDEX idx_orders_created_at ON orders(created_at);
-CREATE INDEX idx_products_category ON products(category);
-CREATE INDEX idx_inventory_product ON inventory_movements(product_id);
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
+CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
+CREATE INDEX IF NOT EXISTS idx_inventory_product ON inventory_movements(product_id);

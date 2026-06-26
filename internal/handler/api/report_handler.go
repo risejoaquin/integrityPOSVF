@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/solidbit/integritypos/internal/handler/middleware"
 	"github.com/solidbit/integritypos/internal/service"
 )
 
@@ -14,7 +13,7 @@ type ReportHandler struct {
 	reportSvc *service.ReportService
 }
 
-func NewReportHandler(mux *http.ServeMux, reportSvc *service.ReportService, auth middleware.AuthFunc) {
+func NewReportHandler(mux *http.ServeMux, reportSvc *service.ReportService, auth func(http.Handler) http.Handler) {
 	h := &ReportHandler{reportSvc: reportSvc}
 
 	mux.Handle("GET /api/v1/reports/sales-summary", auth(http.HandlerFunc(h.handleSalesSummary)))

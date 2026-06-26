@@ -1,5 +1,5 @@
 -- Migration for appointments
-CREATE TABLE appointments (
+CREATE TABLE IF NOT EXISTS appointments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     customer_id UUID REFERENCES customers(id),
     service_id UUID REFERENCES products(id),

@@ -1,5 +1,5 @@
 -- Migration for loyalty
-CREATE TABLE loyalty_accounts (
+CREATE TABLE IF NOT EXISTS loyalty_accounts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
     points INTEGER NOT NULL DEFAULT 0,

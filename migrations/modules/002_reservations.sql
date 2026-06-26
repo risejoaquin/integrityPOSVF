@@ -1,5 +1,5 @@
 -- Migration for reservations
-CREATE TABLE reservations (
+CREATE TABLE IF NOT EXISTS reservations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     customer_id UUID REFERENCES customers(id),
     room_id UUID REFERENCES rooms(id),

@@ -1,5 +1,5 @@
 -- Migration for split_bill
-CREATE TABLE split_bills (
+CREATE TABLE IF NOT EXISTS split_bills (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
     guest_identifier TEXT NOT NULL,

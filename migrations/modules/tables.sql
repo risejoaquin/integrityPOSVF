@@ -1,4 +1,4 @@
-CREATE TABLE tables (
+CREATE TABLE IF NOT EXISTS tables (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL,
     capacity INTEGER,

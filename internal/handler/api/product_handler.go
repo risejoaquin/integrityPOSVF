@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 
 	"github.com/solidbit/integritypos/internal/model"
 	"github.com/solidbit/integritypos/internal/repository"

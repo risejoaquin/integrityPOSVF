@@ -1,5 +1,5 @@
 -- Migration for returns
-CREATE TABLE returns (
+CREATE TABLE IF NOT EXISTS returns (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     order_id UUID NOT NULL REFERENCES orders(id),
     total_refund_cents INTEGER NOT NULL,
