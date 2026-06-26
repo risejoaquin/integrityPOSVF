@@ -2,7 +2,10 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/solidbit/integritypos/internal/model"
 	"github.com/solidbit/integritypos/internal/repository"
@@ -36,9 +39,29 @@ func (h *ProductHandler) listProducts(w http.ResponseWriter, r *http.Request) {
 		Search:        r.URL.Query().Get("search"),
 	}
 
+	limitStr := r.URL.Query().Get("limit")
+	filter.Limit = 50
+	if limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			if l > 100 {
+				filter.Limit = 100
+			} else {
+				filter.Limit = l
+			}
+		}
+	}
+
+	offsetStr := r.URL.Query().Get("offset")
+	if offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o > 0 {
+			filter.Offset = o
+		}
+	}
+
 	products, err := h.svc.List(r.Context(), filter)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		log.Printf("Internal error listing products: %v", err)
+		writeJSONError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -58,7 +81,12 @@ func (h *ProductHandler) createProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.Create(r.Context(), &p); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		if errors.Is(err, model.ErrInvalidInput) {
+			writeJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		log.Printf("Internal error creating product: %v", err)
+		writeJSONError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -69,8 +97,8 @@ func (h *ProductHandler) createProduct(w http.ResponseWriter, r *http.Request) {
 
 func (h *ProductHandler) getProduct(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if id == "" {
-		writeJSONError(w, http.StatusBadRequest, "Missing ID")
+	if !IsValidUUID(id) {
+		writeJSONError(w, http.StatusBadRequest, "Invalid ID format")
 		return
 	}
 
@@ -86,8 +114,8 @@ func (h *ProductHandler) getProduct(w http.ResponseWriter, r *http.Request) {
 
 func (h *ProductHandler) updateProduct(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if id == "" {
-		writeJSONError(w, http.StatusBadRequest, "Missing ID")
+	if !IsValidUUID(id) {
+		writeJSONError(w, http.StatusBadRequest, "Invalid ID format")
 		return
 	}
 
@@ -99,7 +127,12 @@ func (h *ProductHandler) updateProduct(w http.ResponseWriter, r *http.Request) {
 	p.ID = id
 
 	if err := h.svc.Update(r.Context(), &p); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		if errors.Is(err, model.ErrInvalidInput) {
+			writeJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		log.Printf("Internal error updating product: %v", err)
+		writeJSONError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -109,13 +142,14 @@ func (h *ProductHandler) updateProduct(w http.ResponseWriter, r *http.Request) {
 
 func (h *ProductHandler) deleteProduct(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if id == "" {
-		writeJSONError(w, http.StatusBadRequest, "Missing ID")
+	if !IsValidUUID(id) {
+		writeJSONError(w, http.StatusBadRequest, "Invalid ID format")
 		return
 	}
 
 	if err := h.svc.Delete(r.Context(), id); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		log.Printf("Internal error deleting product: %v", err)
+		writeJSONError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -124,8 +158,8 @@ func (h *ProductHandler) deleteProduct(w http.ResponseWriter, r *http.Request) {
 
 func (h *ProductHandler) adjustStock(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if id == "" {
-		writeJSONError(w, http.StatusBadRequest, "Missing ID")
+	if !IsValidUUID(id) {
+		writeJSONError(w, http.StatusBadRequest, "Invalid ID format")
 		return
 	}
 
@@ -139,10 +173,17 @@ func (h *ProductHandler) adjustStock(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.AdjustStock(r.Context(), id, req.Delta, req.Reason); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		if errors.Is(err, model.ErrStockInsufficient) {
+			writeJSONError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		log.Printf("Internal error adjusting stock: %v", err)
+		writeJSONError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
+
+

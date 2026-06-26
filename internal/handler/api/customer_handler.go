@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/solidbit/integritypos/internal/model"
 	"github.com/solidbit/integritypos/internal/service"
@@ -14,9 +15,41 @@ type CustomerHandler struct {
 
 func NewCustomerHandler(mux *http.ServeMux, svc *service.CustomerService) {
 	h := &CustomerHandler{svc: svc}
+	mux.HandleFunc("GET /api/v1/customers", h.listCustomers)
 	mux.HandleFunc("POST /api/v1/customers", h.createCustomer)
 	mux.HandleFunc("GET /api/v1/customers/{id}", h.getCustomer)
 	mux.HandleFunc("PUT /api/v1/customers/{id}", h.updateCustomer)
+}
+
+func (h *CustomerHandler) listCustomers(w http.ResponseWriter, r *http.Request) {
+	limitStr := r.URL.Query().Get("limit")
+	limit := 50
+	if limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			if l > 100 {
+				limit = 100
+			} else {
+				limit = l
+			}
+		}
+	}
+
+	offsetStr := r.URL.Query().Get("offset")
+	offset := 0
+	if offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o > 0 {
+			offset = o
+		}
+	}
+
+	customers, err := h.svc.List(r.Context(), limit, offset)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(customers)
 }
 
 func (h *CustomerHandler) createCustomer(w http.ResponseWriter, r *http.Request) {
@@ -38,8 +71,8 @@ func (h *CustomerHandler) createCustomer(w http.ResponseWriter, r *http.Request)
 
 func (h *CustomerHandler) getCustomer(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if id == "" {
-		writeJSONError(w, http.StatusBadRequest, "Missing ID")
+	if !IsValidUUID(id) {
+		writeJSONError(w, http.StatusBadRequest, "Invalid ID format")
 		return
 	}
 
@@ -55,8 +88,8 @@ func (h *CustomerHandler) getCustomer(w http.ResponseWriter, r *http.Request) {
 
 func (h *CustomerHandler) updateCustomer(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if id == "" {
-		writeJSONError(w, http.StatusBadRequest, "Missing ID")
+	if !IsValidUUID(id) {
+		writeJSONError(w, http.StatusBadRequest, "Invalid ID format")
 		return
 	}
 

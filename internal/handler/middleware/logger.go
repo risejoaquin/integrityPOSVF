@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -29,6 +29,10 @@ func Logger(next http.Handler) http.Handler {
 		rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rw, r)
 		duration := time.Since(start)
-		log.Printf("[%s] %s %d %s", r.Method, r.URL.Path, rw.status, duration)
+		if rw.status >= 400 {
+			slog.Error("Request processed", "method", r.Method, "path", r.URL.Path, "status", rw.status, "duration", duration)
+		} else {
+			slog.Info("Request processed", "method", r.Method, "path", r.URL.Path, "status", rw.status, "duration", duration)
+		}
 	})
 }

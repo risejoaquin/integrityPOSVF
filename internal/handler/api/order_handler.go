@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -47,7 +49,17 @@ func (h *OrderHandler) createOrder(w http.ResponseWriter, r *http.Request) {
 
 	order, err := h.svc.CreateOrder(r.Context(), req.Cart, source, custInfo)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		switch {
+		case errors.Is(err, model.ErrInvalidInput), errors.Is(err, model.ErrCartEmpty):
+			writeJSONError(w, http.StatusBadRequest, err.Error())
+		case errors.Is(err, model.ErrProductNotFound):
+			writeJSONError(w, http.StatusNotFound, err.Error())
+		case errors.Is(err, model.ErrStockInsufficient):
+			writeJSONError(w, http.StatusUnprocessableEntity, err.Error())
+		default:
+			log.Printf("Internal error creating order: %v", err)
+			writeJSONError(w, http.StatusInternalServerError, "Internal server error")
+		}
 		return
 	}
 
@@ -57,18 +69,32 @@ func (h *OrderHandler) createOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *OrderHandler) listOrders(w http.ResponseWriter, r *http.Request) {
+	status := r.URL.Query().Get("status")
+	
 	limitStr := r.URL.Query().Get("limit")
 	limit := 50
 	if limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
-			limit = l
+			if l > 100 {
+				limit = 100
+			} else {
+				limit = l
+			}
 		}
 	}
 
-	// Simplification: only list recent. Status filter can be applied similarly to products.
-	orders, err := h.svc.ListOrders(r.Context(), limit)
+	offsetStr := r.URL.Query().Get("offset")
+	offset := 0
+	if offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o > 0 {
+			offset = o
+		}
+	}
+
+	orders, err := h.svc.ListOrders(r.Context(), status, limit, offset)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		log.Printf("Internal error listing orders: %v", err)
+		writeJSONError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -82,13 +108,14 @@ func (h *OrderHandler) listOrders(w http.ResponseWriter, r *http.Request) {
 
 func (h *OrderHandler) getOrder(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if id == "" {
-		writeJSONError(w, http.StatusBadRequest, "Missing ID")
+	if !IsValidUUID(id) {
+		writeJSONError(w, http.StatusBadRequest, "Invalid ID format")
 		return
 	}
 
 	order, err := h.svc.GetOrder(r.Context(), id)
 	if err != nil {
+		log.Printf("Error fetching order: %v", err)
 		writeJSONError(w, http.StatusNotFound, "Order not found")
 		return
 	}
@@ -99,8 +126,8 @@ func (h *OrderHandler) getOrder(w http.ResponseWriter, r *http.Request) {
 
 func (h *OrderHandler) updateOrderStatus(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if id == "" {
-		writeJSONError(w, http.StatusBadRequest, "Missing ID")
+	if !IsValidUUID(id) {
+		writeJSONError(w, http.StatusBadRequest, "Invalid ID format")
 		return
 	}
 
@@ -111,25 +138,27 @@ func (h *OrderHandler) updateOrderStatus(w http.ResponseWriter, r *http.Request)
 		writeJSONError(w, http.StatusBadRequest, "Invalid JSON body")
 		return
 	}
+	
+	if req.Status == "" {
+		writeJSONError(w, http.StatusBadRequest, "Status is required")
+		return
+	}
 
-	if req.Status == "confirmed" {
-		if err := h.svc.ConfirmOrder(r.Context(), id); err != nil {
-			writeJSONError(w, http.StatusInternalServerError, err.Error())
-			return
+	err := h.svc.UpdateOrderStatus(r.Context(), id, model.OrderStatus(req.Status))
+	if err != nil {
+		switch {
+		case errors.Is(err, model.ErrInvalidTransition):
+			writeJSONError(w, http.StatusConflict, err.Error())
+		case errors.Is(err, model.ErrStockInsufficient):
+			writeJSONError(w, http.StatusUnprocessableEntity, err.Error())
+		default:
+			log.Printf("Internal error updating order status: %v", err)
+			writeJSONError(w, http.StatusInternalServerError, "Internal server error")
 		}
-	} else if req.Status == "cancelled" {
-		if err := h.svc.CancelOrder(r.Context(), id); err != nil {
-			writeJSONError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-	} else {
-		// Just a simple status update for others like preparing/completed
-		if err := h.svc.OrderRepo.UpdateStatus(r.Context(), id, req.Status); err != nil {
-			writeJSONError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
+

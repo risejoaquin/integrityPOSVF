@@ -11,6 +11,10 @@ type CustomerService struct {
 	Repo *repository.CustomerRepository
 }
 
+func (s *CustomerService) List(ctx context.Context, limit, offset int) ([]model.Customer, error) {
+	return s.Repo.List(ctx, limit, offset)
+}
+
 func (s *CustomerService) GetByID(ctx context.Context, id string) (model.Customer, error) {
 	return s.Repo.GetByID(ctx, id)
 }

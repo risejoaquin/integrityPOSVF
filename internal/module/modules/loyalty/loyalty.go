@@ -69,18 +69,21 @@ func (m *Module) Init(mux *http.ServeMux, db *pgxpool.Pool, cfg *config.Config, 
 	})
 
 	// Subscribe to order confirmed
-	bus.Subscribe("order.confirmed", func(data interface{}) {
-		order, ok := data.(model.Order)
-		if ok && order.CustomerPhone != "" {
-			cust, err := custRepo.GetByPhone(context.Background(), order.CustomerPhone)
-			if err == nil {
-				points := order.TotalCents / 100 // 1 point per dollar
-				if err := repo.AddPoints(context.Background(), cust.ID, points); err == nil {
-					log.Printf("Loyalty: Added %d points to customer %s", points, cust.ID)
+	ch := bus.Subscribe("order.confirmed")
+	go func() {
+		for data := range ch {
+			order, ok := data.(model.Order)
+			if ok && order.CustomerPhone != "" {
+				cust, err := custRepo.GetByPhone(context.Background(), order.CustomerPhone)
+				if err == nil {
+					points := order.TotalCents / 100 // 1 point per dollar
+					if err := repo.AddPoints(context.Background(), cust.ID, points); err == nil {
+						log.Printf("Loyalty: Added %d points to customer %s", points, cust.ID)
+					}
 				}
 			}
 		}
-	})
+	}()
 	
 	return nil
 }

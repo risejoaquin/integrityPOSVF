@@ -8,10 +8,10 @@ import (
 )
 
 func TestOrderRepositoryIntegration(t *testing.T) {
-	pool := setupTestDB(t)
-	defer pool.Close()
+	pool, cleanup := setupTestDB(t)
+	defer cleanup()
 
-	repo := &OrderRepository{Pool: pool}
+	repo := NewOrderRepository(pool)
 
 	t.Run("CreateAndReadOrder", func(t *testing.T) {
 		ctx := context.Background()
@@ -24,14 +24,14 @@ func TestOrderRepositoryIntegration(t *testing.T) {
 			TotalCents:    2000,
 		}
 
-		tx, err := repo.BeginTx(ctx)
+		tx, err := pool.Begin(ctx)
 		if err != nil {
 			t.Fatalf("BeginTx failed: %v", err)
 		}
 
 		err = repo.Create(ctx, tx, order)
 		if err != nil {
-			tx.Rollback(ctx)
+			tx.Rollback(context.Background())
 			t.Fatalf("Create failed: %v", err)
 		}
 		
@@ -45,7 +45,7 @@ func TestOrderRepositoryIntegration(t *testing.T) {
 		}
 
 		// Read
-		fetched, err := repo.GetByID(ctx, order.ID)
+		fetched, err := repo.GetByID(ctx, pool, order.ID)
 		if err != nil {
 			t.Fatalf("GetByID failed: %v", err)
 		}
@@ -54,17 +54,14 @@ func TestOrderRepositoryIntegration(t *testing.T) {
 		}
 
 		// Update Status
-		err = repo.UpdateStatus(ctx, order.ID, "completed")
+		err = repo.UpdateStatusTx(ctx, pool, order.ID, "completed")
 		if err != nil {
 			t.Fatalf("UpdateStatus failed: %v", err)
 		}
 
-		fetched, _ = repo.GetByID(ctx, order.ID)
+		fetched, _ = repo.GetByID(ctx, pool, order.ID)
 		if fetched.Status != "completed" {
 			t.Errorf("Expected status 'completed', got %s", fetched.Status)
 		}
-
-		// Cleanup
-		pool.Exec(ctx, "DELETE FROM orders WHERE id = $1", order.ID)
 	})
 }

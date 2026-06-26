@@ -20,8 +20,8 @@ func NewInventoryHandler(mux *http.ServeMux, svc *service.InventoryService) {
 
 func (h *InventoryHandler) listMovements(w http.ResponseWriter, r *http.Request) {
 	productID := r.URL.Query().Get("product_id")
-	if productID == "" {
-		writeJSONError(w, http.StatusBadRequest, "Missing product_id")
+	if !IsValidUUID(productID) {
+		writeJSONError(w, http.StatusBadRequest, "Invalid product_id format")
 		return
 	}
 
@@ -29,7 +29,11 @@ func (h *InventoryHandler) listMovements(w http.ResponseWriter, r *http.Request)
 	limit := 50
 	if limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
-			limit = l
+			if l > 100 {
+				limit = 100
+			} else {
+				limit = l
+			}
 		}
 	}
 

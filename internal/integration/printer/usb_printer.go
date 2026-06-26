@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"sync"
 
 	"github.com/solidbit/integritypos/internal/model"
 )
 
 type USBPrinter struct {
+	mu           sync.Mutex
 	devicePath   string
 	businessName string
 }
@@ -18,6 +20,9 @@ func NewUSBPrinter(devicePath, businessName string) *USBPrinter {
 }
 
 func (p *USBPrinter) PrintTicket(order model.Order) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	f, err := os.OpenFile(p.devicePath, os.O_RDWR, 0)
 	if err != nil {
 		if runtime.GOOS == "windows" {
@@ -31,6 +36,9 @@ func (p *USBPrinter) PrintTicket(order model.Order) error {
 }
 
 func (p *USBPrinter) OpenDrawer() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	f, err := os.OpenFile(p.devicePath, os.O_RDWR, 0)
 	if err != nil {
 		if runtime.GOOS == "windows" {
@@ -42,4 +50,16 @@ func (p *USBPrinter) OpenDrawer() error {
 
 	_, err = f.Write([]byte{0x1b, 0x70, 0x00, 0x32, 0x32})
 	return err
+}
+
+func (p *USBPrinter) Ping() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	f, err := os.OpenFile(p.devicePath, os.O_RDWR, 0)
+	if err != nil {
+		return err
+	}
+	f.Close()
+	return nil
 }

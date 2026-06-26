@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -10,34 +11,38 @@ import (
 )
 
 type ReportHandler struct {
-	reportSvc *service.ReportService
+	svc *service.ReportService
 }
 
-func NewReportHandler(mux *http.ServeMux, reportSvc *service.ReportService, auth func(http.Handler) http.Handler) {
-	h := &ReportHandler{reportSvc: reportSvc}
-
-	mux.Handle("GET /api/v1/reports/sales-summary", auth(http.HandlerFunc(h.handleSalesSummary)))
-	mux.Handle("GET /api/v1/reports/top-products", auth(http.HandlerFunc(h.handleTopProducts)))
-	mux.Handle("GET /api/v1/reports/low-stock", auth(http.HandlerFunc(h.handleLowStock)))
-	mux.Handle("GET /api/v1/reports/daily-sales", auth(http.HandlerFunc(h.handleDailySales)))
+func NewReportHandler(mux *http.ServeMux, svc *service.ReportService, authMiddleware func(http.Handler) http.Handler) *ReportHandler {
+	h := &ReportHandler{svc: svc}
+	mux.Handle("GET /api/v1/reports/sales-summary", authMiddleware(http.HandlerFunc(h.salesSummary)))
+	mux.Handle("GET /api/v1/reports/top-products", authMiddleware(http.HandlerFunc(h.topProducts)))
+	mux.Handle("GET /api/v1/reports/low-stock", authMiddleware(http.HandlerFunc(h.lowStock)))
+	mux.Handle("GET /api/v1/reports/daily-sales", authMiddleware(http.HandlerFunc(h.dailySales)))
+	return h
 }
 
-func (h *ReportHandler) handleSalesSummary(w http.ResponseWriter, r *http.Request) {
-	fromStr := r.URL.Query().Get("from")
-	toStr := r.URL.Query().Get("to")
-	
-	from, err := time.Parse("2006-01-02", fromStr)
-	if err != nil {
-		from = time.Now().AddDate(0, -1, 0) // Default to last month
+func parseDateOrDefault(dateStr string, def time.Time) time.Time {
+	if dateStr == "" {
+		return def
 	}
-	to, err := time.Parse("2006-01-02", toStr)
+	t, err := time.Parse("2006-01-02", dateStr)
 	if err != nil {
-		to = time.Now().AddDate(0, 0, 1) // Default to tomorrow to include today
+		return def
 	}
+	return t
+}
 
-	summary, err := h.reportSvc.SalesSummary(r.Context(), from, to)
+func (h *ReportHandler) salesSummary(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+	from := parseDateOrDefault(r.URL.Query().Get("from"), now.AddDate(0, -1, 0)) // default 1 month ago
+	to := parseDateOrDefault(r.URL.Query().Get("to"), now).Add(24 * time.Hour) // include the whole day
+
+	summary, err := h.svc.SalesSummary(r.Context(), from, to)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("Internal error fetching sales summary: %v", err)
+		writeJSONError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -45,27 +50,23 @@ func (h *ReportHandler) handleSalesSummary(w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(summary)
 }
 
-func (h *ReportHandler) handleTopProducts(w http.ResponseWriter, r *http.Request) {
-	fromStr := r.URL.Query().Get("from")
-	toStr := r.URL.Query().Get("to")
+func (h *ReportHandler) topProducts(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+	from := parseDateOrDefault(r.URL.Query().Get("from"), now.AddDate(0, -1, 0))
+	to := parseDateOrDefault(r.URL.Query().Get("to"), now).Add(24 * time.Hour)
+
 	limitStr := r.URL.Query().Get("limit")
-
-	from, err := time.Parse("2006-01-02", fromStr)
-	if err != nil {
-		from = time.Now().AddDate(0, -1, 0)
-	}
-	to, err := time.Parse("2006-01-02", toStr)
-	if err != nil {
-		to = time.Now().AddDate(0, 0, 1)
-	}
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil || limit <= 0 {
-		limit = 10
+	limit := 10
+	if limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
 	}
 
-	products, err := h.reportSvc.TopProducts(r.Context(), from, to, limit)
+	products, err := h.svc.TopProducts(r.Context(), from, to, limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("Internal error fetching top products: %v", err)
+		writeJSONError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -73,16 +74,19 @@ func (h *ReportHandler) handleTopProducts(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(products)
 }
 
-func (h *ReportHandler) handleLowStock(w http.ResponseWriter, r *http.Request) {
+func (h *ReportHandler) lowStock(w http.ResponseWriter, r *http.Request) {
 	thresholdStr := r.URL.Query().Get("threshold")
-	threshold, err := strconv.Atoi(thresholdStr)
-	if err != nil {
-		threshold = 5
+	threshold := 5
+	if thresholdStr != "" {
+		if t, err := strconv.Atoi(thresholdStr); err == nil && t > 0 {
+			threshold = t
+		}
 	}
 
-	products, err := h.reportSvc.LowStock(r.Context(), threshold)
+	products, err := h.svc.LowStock(r.Context(), threshold)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("Internal error fetching low stock: %v", err)
+		writeJSONError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -90,16 +94,19 @@ func (h *ReportHandler) handleLowStock(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(products)
 }
 
-func (h *ReportHandler) handleDailySales(w http.ResponseWriter, r *http.Request) {
+func (h *ReportHandler) dailySales(w http.ResponseWriter, r *http.Request) {
 	daysStr := r.URL.Query().Get("days")
-	days, err := strconv.Atoi(daysStr)
-	if err != nil || days <= 0 {
-		days = 7
+	days := 7
+	if daysStr != "" {
+		if d, err := strconv.Atoi(daysStr); err == nil && d > 0 {
+			days = d
+		}
 	}
 
-	sales, err := h.reportSvc.DailySales(r.Context(), days)
+	sales, err := h.svc.DailySales(r.Context(), days)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("Internal error fetching daily sales: %v", err)
+		writeJSONError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 

@@ -2,175 +2,305 @@ package service
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/solidbit/integritypos/internal/model"
 	"github.com/solidbit/integritypos/internal/repository"
 )
 
-type mockOrderRepo struct {
-	orders     map[string]model.Order
-	status     string
-	createFunc func(ctx context.Context, tx repository.Tx, order *model.Order) error
-	txFunc     func(ctx context.Context) (repository.Tx, error)
-}
-
+// Dummy Tx
 type mockTx struct {
-	repository.Tx
+	pgx.Tx
+	commitErr   error
+	rollbackErr error
 }
 
-func (m *mockTx) Rollback(ctx context.Context) error { return nil }
-func (m *mockTx) Commit(ctx context.Context) error   { return nil }
-
-func (m *mockOrderRepo) BeginTx(ctx context.Context) (repository.Tx, error) {
-	if m.txFunc != nil {
-		return m.txFunc(ctx)
-	}
-	return &mockTx{}, nil
+func (m *mockTx) Commit(ctx context.Context) error {
+	return m.commitErr
 }
 
-func (m *mockOrderRepo) Create(ctx context.Context, tx repository.Tx, order *model.Order) error {
-	if m.createFunc != nil {
-		return m.createFunc(ctx, tx, order)
-	}
-	order.ID = "test-order-123"
-	m.orders[order.ID] = *order
+func (m *mockTx) Rollback(ctx context.Context) error {
+	return m.rollbackErr
+}
+
+func (m *mockTx) Exec(ctx context.Context, sql string, arguments ...interface{}) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
+}
+func (m *mockTx) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+	return nil, nil
+}
+func (m *mockTx) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
 	return nil
 }
 
-func (m *mockOrderRepo) GetByID(ctx context.Context, id string) (model.Order, error) {
-	if order, ok := m.orders[id]; ok {
-		return order, nil
-	}
-	return model.Order{}, fmt.Errorf("not found")
+type mockDBBeginner struct {
+	tx  pgx.Tx
+	err error
 }
 
-func (m *mockOrderRepo) UpdateStatus(ctx context.Context, id, status string) error {
-	if order, ok := m.orders[id]; ok {
-		order.Status = status
-		m.orders[id] = order
-		m.status = status
-		return nil
-	}
-	return fmt.Errorf("not found")
+func (m *mockDBBeginner) Begin(ctx context.Context) (pgx.Tx, error) {
+	return m.tx, m.err
 }
 
-func (m *mockOrderRepo) List(ctx context.Context) ([]model.Order, error) {
-	var list []model.Order
-	for _, o := range m.orders {
-		list = append(list, o)
+type mockOrderRepo struct {
+	createFn         func(ctx context.Context, db repository.DBTX, order *model.Order) error
+	getByIDFn        func(ctx context.Context, db repository.DBTX, id string) (model.Order, error)
+	listFn           func(ctx context.Context, db repository.DBTX, status string, limit, offset int) ([]model.Order, error)
+	updateStatusTxFn func(ctx context.Context, db repository.DBTX, id string, status string) error
+}
+
+func (m *mockOrderRepo) Create(ctx context.Context, db repository.DBTX, order *model.Order) error {
+	if m.createFn != nil {
+		return m.createFn(ctx, db, order)
 	}
-	return list, nil
+	return nil
+}
+
+func (m *mockOrderRepo) GetByID(ctx context.Context, db repository.DBTX, id string) (model.Order, error) {
+	if m.getByIDFn != nil {
+		return m.getByIDFn(ctx, db, id)
+	}
+	return model.Order{}, nil
+}
+
+func (m *mockOrderRepo) List(ctx context.Context, db repository.DBTX, status string, limit, offset int) ([]model.Order, error) {
+	if m.listFn != nil {
+		return m.listFn(ctx, db, status, limit, offset)
+	}
+	return []model.Order{}, nil
+}
+
+func (m *mockOrderRepo) UpdateStatusTx(ctx context.Context, db repository.DBTX, id string, status string) error {
+	if m.updateStatusTxFn != nil {
+		return m.updateStatusTxFn(ctx, db, id, status)
+	}
+	return nil
 }
 
 type mockProductRepo struct {
-	products map[string]model.Product
+	getByIDsFn             func(ctx context.Context, db repository.DBTX, ids []string) ([]model.Product, error)
+	decrementStockAtomicFn func(ctx context.Context, db repository.DBTX, productID string, quantity int) error
+	listFn                 func(ctx context.Context, filter repository.ProductFilter) ([]model.Product, error)
+	getByIDFn              func(ctx context.Context, id string) (model.Product, error)
+	createFn               func(ctx context.Context, p *model.Product) error
+	updateFn               func(ctx context.Context, p *model.Product) error
+	deleteFn               func(ctx context.Context, id string) error
 }
 
-func (m *mockProductRepo) GetByID(ctx context.Context, id string) (model.Product, error) {
-	if p, ok := m.products[id]; ok {
-		return p, nil
+func (m *mockProductRepo) GetByIDs(ctx context.Context, db repository.DBTX, ids []string) ([]model.Product, error) {
+	if m.getByIDsFn != nil {
+		return m.getByIDsFn(ctx, db, ids)
 	}
-	return model.Product{}, fmt.Errorf("not found")
+	return []model.Product{}, nil
 }
 
-func (m *mockProductRepo) UpdateStock(ctx context.Context, tx repository.Tx, id string, delta int) error {
-	if p, ok := m.products[id]; ok {
-		p.Stock += delta
-		m.products[id] = p
-		return nil
+func (m *mockProductRepo) DecrementStockAtomic(ctx context.Context, db repository.DBTX, productID string, quantity int) error {
+	if m.decrementStockAtomicFn != nil {
+		return m.decrementStockAtomicFn(ctx, db, productID, quantity)
 	}
-	return fmt.Errorf("not found")
-}
-
-type mockInventoryRepo struct{}
-
-func (m *mockInventoryRepo) AdjustStock(ctx context.Context, tx repository.Tx, req repository.StockAdjustmentReq) error {
 	return nil
 }
 
-func TestCreateOrder(t *testing.T) {
-	orderRepo := &mockOrderRepo{orders: make(map[string]model.Order)}
+func (m *mockProductRepo) List(ctx context.Context, filter repository.ProductFilter) ([]model.Product, error) {
+	if m.listFn != nil {
+		return m.listFn(ctx, filter)
+	}
+	return []model.Product{}, nil
+}
+
+func (m *mockProductRepo) GetByID(ctx context.Context, id string) (model.Product, error) {
+	if m.getByIDFn != nil {
+		return m.getByIDFn(ctx, id)
+	}
+	return model.Product{}, nil
+}
+
+func (m *mockProductRepo) Create(ctx context.Context, p *model.Product) error {
+	if m.createFn != nil {
+		return m.createFn(ctx, p)
+	}
+	return nil
+}
+
+func (m *mockProductRepo) Update(ctx context.Context, p *model.Product) error {
+	if m.updateFn != nil {
+		return m.updateFn(ctx, p)
+	}
+	return nil
+}
+
+func (m *mockProductRepo) Delete(ctx context.Context, id string) error {
+	if m.deleteFn != nil {
+		return m.deleteFn(ctx, id)
+	}
+	return nil
+}
+
+type mockInventoryRepo struct {
+	recordMovementFn func(ctx context.Context, db repository.DBTX, productID string, delta int, reason string, orderID string) error
+}
+
+func (m *mockInventoryRepo) RecordMovement(ctx context.Context, db repository.DBTX, productID string, delta int, reason string, orderID string) error {
+	if m.recordMovementFn != nil {
+		return m.recordMovementFn(ctx, db, productID, delta, reason, orderID)
+	}
+	return nil
+}
+
+func TestCreateOrder_Success(t *testing.T) {
+	db := &mockDBBeginner{tx: &mockTx{}}
 	productRepo := &mockProductRepo{
-		products: map[string]model.Product{
-			"p1": {ID: "p1", Name: "Burger", PriceCents: 500, Stock: 10, IsAvailable: true},
-			"p2": {ID: "p2", Name: "Fries", PriceCents: 250, Stock: 5, IsAvailable: true},
-			"p3": {ID: "p3", Name: "Soda", PriceCents: 150, Stock: 0, IsAvailable: true},
+		getByIDsFn: func(ctx context.Context, db repository.DBTX, ids []string) ([]model.Product, error) {
+			return []model.Product{
+				{ID: "00000000-0000-0000-0000-000000000001", Name: "Burger", PriceCents: 1000},
+			}, nil
+		},
+	}
+	orderRepo := &mockOrderRepo{
+		createFn: func(ctx context.Context, db repository.DBTX, order *model.Order) error {
+			order.ID = "order-123"
+			return nil
 		},
 	}
 	invRepo := &mockInventoryRepo{}
 
 	svc := &OrderService{
+		DB:            db,
 		OrderRepo:     orderRepo,
 		ProductRepo:   productRepo,
 		InventoryRepo: invRepo,
 	}
 
-	t.Run("successful order", func(t *testing.T) {
-		cart := Cart{
-			Items: []CartItem{
-				{ProductID: "p1", Quantity: 2},
-				{ProductID: "p2", Quantity: 1},
-			},
-		}
-		
-		order, err := svc.CreateOrder(context.Background(), cart, "test", CustomerInfo{Name: "John"})
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-		if order.ID == "" {
-			t.Errorf("expected order ID to be set")
-		}
-		if order.TotalCents != 1250 {
-			t.Errorf("expected total 1250, got %d", order.TotalCents)
-		}
-		if productRepo.products["p1"].Stock != 8 {
-			t.Errorf("expected p1 stock to be 8, got %d", productRepo.products["p1"].Stock)
-		}
-	})
-
-	t.Run("empty cart", func(t *testing.T) {
-		_, err := svc.CreateOrder(context.Background(), Cart{}, "test", CustomerInfo{})
-		if err == nil {
-			t.Errorf("expected error for empty cart")
-		}
-	})
-
-	t.Run("product not found", func(t *testing.T) {
-		cart := Cart{Items: []CartItem{{ProductID: "invalid", Quantity: 1}}}
-		_, err := svc.CreateOrder(context.Background(), cart, "test", CustomerInfo{})
-		if err == nil {
-			t.Errorf("expected error for invalid product")
-		}
-	})
-
-	t.Run("insufficient stock", func(t *testing.T) {
-		cart := Cart{Items: []CartItem{{ProductID: "p3", Quantity: 1}}}
-		_, err := svc.CreateOrder(context.Background(), cart, "test", CustomerInfo{})
-		if err == nil {
-			t.Errorf("expected error for insufficient stock")
-		}
-	})
-}
-
-func TestConfirmOrder(t *testing.T) {
-	orderRepo := &mockOrderRepo{
-		orders: map[string]model.Order{
-			"o1": {ID: "o1", Status: "pending"},
+	cart := Cart{
+		Source: "web",
+		Items: []CartItem{
+			{ProductID: "00000000-0000-0000-0000-000000000001", Quantity: 2},
 		},
 	}
 
+	order, err := svc.CreateOrder(context.Background(), cart)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if order.Status != string(model.StatusPending) {
+		t.Errorf("expected status pending, got: %v", order.Status)
+	}
+	if order.TotalCents != 2000 {
+		t.Errorf("expected total 2000, got: %v", order.TotalCents)
+	}
+}
+
+func TestCreateOrder_EmptyCart(t *testing.T) {
+	svc := &OrderService{}
+	_, err := svc.CreateOrder(context.Background(), Cart{})
+	if !errors.Is(err, model.ErrCartEmpty) {
+		t.Errorf("expected ErrCartEmpty, got: %v", err)
+	}
+}
+
+func TestCreateOrder_InsufficientStock(t *testing.T) {
+	db := &mockDBBeginner{tx: &mockTx{}}
+	productRepo := &mockProductRepo{
+		getByIDsFn: func(ctx context.Context, db repository.DBTX, ids []string) ([]model.Product, error) {
+			return []model.Product{
+				{ID: "00000000-0000-0000-0000-000000000001", Name: "Burger", PriceCents: 1000},
+			}, nil
+		},
+		decrementStockAtomicFn: func(ctx context.Context, db repository.DBTX, productID string, quantity int) error {
+			return fmt.Errorf("%w: for product %s", model.ErrStockInsufficient, productID)
+		},
+	}
+	orderRepo := &mockOrderRepo{}
 	svc := &OrderService{
+		DB:            db,
+		ProductRepo:   productRepo,
+		OrderRepo:     orderRepo,
+	}
+
+	cart := Cart{
+		Items: []CartItem{
+			{ProductID: "00000000-0000-0000-0000-000000000001", Quantity: 100},
+		},
+	}
+	_, err := svc.CreateOrder(context.Background(), cart)
+	if !errors.Is(err, model.ErrStockInsufficient) {
+		t.Errorf("expected ErrStockInsufficient, got: %v", err)
+	}
+}
+
+func TestCreateOrder_InvalidInput(t *testing.T) {
+	svc := &OrderService{}
+	longName := string(make([]byte, 101))
+	cart := Cart{
+		CustomerName: longName,
+		Items: []CartItem{
+			{ProductName: "Generic", UnitPriceCents: 100, Quantity: 1},
+		},
+	}
+	_, err := svc.CreateOrder(context.Background(), cart)
+	if !errors.Is(err, model.ErrInvalidInput) {
+		t.Errorf("expected ErrInvalidInput for long name, got: %v", err)
+	}
+}
+
+func TestUpdateOrderStatus_InvalidTransition(t *testing.T) {
+	db := &mockDBBeginner{tx: &mockTx{}}
+	orderRepo := &mockOrderRepo{
+		getByIDFn: func(ctx context.Context, db repository.DBTX, id string) (model.Order, error) {
+			return model.Order{ID: "order-1", Status: string(model.StatusCompleted)}, nil
+		},
+	}
+	svc := &OrderService{
+		DB:        db,
 		OrderRepo: orderRepo,
 	}
 
-	err := svc.ConfirmOrder(context.Background(), "o1")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+	err := svc.UpdateOrderStatus(context.Background(), "order-1", model.StatusCancelled)
+	if !errors.Is(err, model.ErrInvalidTransition) {
+		t.Errorf("expected ErrInvalidTransition, got: %v", err)
+	}
+}
+
+func TestUpdateOrderStatus_Cancel_RestocksInventory(t *testing.T) {
+	db := &mockDBBeginner{tx: &mockTx{}}
+	orderRepo := &mockOrderRepo{
+		getByIDFn: func(ctx context.Context, db repository.DBTX, id string) (model.Order, error) {
+			return model.Order{
+				ID:     "order-1",
+				Status: string(model.StatusConfirmed),
+				Items: []model.OrderItem{
+					{ProductID: "00000000-0000-0000-0000-000000000001", Quantity: 2},
+				},
+			}, nil
+		},
+	}
+	
+	restockCalled := false
+	productRepo := &mockProductRepo{
+		decrementStockAtomicFn: func(ctx context.Context, db repository.DBTX, productID string, quantity int) error {
+			if productID == "00000000-0000-0000-0000-000000000001" && quantity == -2 {
+				restockCalled = true
+			}
+			return nil
+		},
+	}
+	invRepo := &mockInventoryRepo{}
+
+	svc := &OrderService{
+		DB:            db,
+		OrderRepo:     orderRepo,
+		ProductRepo:   productRepo,
+		InventoryRepo: invRepo,
 	}
 
-	if orderRepo.status != "confirmed" {
-		t.Errorf("expected status 'confirmed', got %s", orderRepo.status)
+	err := svc.UpdateOrderStatus(context.Background(), "order-1", model.StatusCancelled)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if !restockCalled {
+		t.Errorf("expected restock to be called")
 	}
 }

@@ -111,6 +111,7 @@
       <div class="nav-item" onclick="showSection('reports')">Reportes</div>
       <div class="nav-item" onclick="showSection('products')">Productos</div>
       <div class="nav-item" onclick="showSection('customers')">Clientes</div>
+      <div class="nav-item" onclick="showSection('custom-fields')">Campos Personalizados</div>
     </div>
 
     <div class="content">
@@ -240,6 +241,29 @@
           </table>
         </div>
       </div>
+
+      <!-- Custom Fields Section -->
+      <div id="custom-fields" class="section hidden">
+        <div class="header-flex">
+          <h2 style="margin-top: 0">Campos Personalizados</h2>
+          <button class="btn">Nuevo Campo</button>
+        </div>
+        <div class="card">
+          <table id="custom-fields-table">
+            <thead>
+              <tr>
+                <th>Clave</th>
+                <th>Etiqueta</th>
+                <th>Entidad</th>
+                <th>Tipo</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="4" style="text-align:center;">Cargando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <script>
@@ -259,20 +283,30 @@
         if (id === "reports") loadReports();
         if (id === "products") loadProducts();
         if (id === "customers") loadCustomers();
+        if (id === "custom-fields") loadCustomFields();
+      }
+
+      function getTodayDateStr() {
+        return new Date().toISOString().split('T')[0];
       }
 
       async function loadDashboard() {
         try {
-          const res = await fetch("/api/v1/admin/dashboard", {
+          const today = getTodayDateStr();
+          const res = await fetch(`/api/v1/reports/sales-summary?from=${today}&to=${today}`, {
             headers: AUTH_HEADER,
           });
           const data = await res.json();
           document.getElementById("dash-sales").textContent =
-            `$${(data.today_sales / 100).toFixed(2)}`;
-          document.getElementById("dash-pending").textContent =
-            data.pending_orders_count;
-          document.getElementById("dash-lowstock").textContent =
-            data.low_stock_count;
+            `$${(data.total_revenue).toFixed(2)}`;
+
+          const ordersRes = await fetch("/api/v1/orders?status=pending&limit=1", { headers: AUTH_HEADER });
+          // Could rely on X-Total-Count or similar, or just show pending total from summary
+          document.getElementById("dash-pending").textContent = "?";
+
+          const lowStockRes = await fetch("/api/v1/reports/low-stock?threshold=5", { headers: AUTH_HEADER });
+          const lowStockData = await lowStockRes.json();
+          document.getElementById("dash-lowstock").textContent = (lowStockData || []).length;
 
           const salesRes = await fetch("/api/v1/reports/daily-sales?days=7", {
             headers: AUTH_HEADER,
@@ -281,7 +315,7 @@
           const tbody = document.querySelector("#daily-sales-table tbody");
           tbody.innerHTML = "";
           (salesData || []).forEach((d) => {
-            tbody.innerHTML += `<tr><td>${d.Date}</td><td>${d.Orders}</td><td>$${(d.Revenue / 100).toFixed(2)}</td></tr>`;
+            tbody.innerHTML += `<tr><td>${d.date}</td><td>${d.orders}</td><td>$${(d.revenue).toFixed(2)}</td></tr>`;
           });
         } catch (e) {
           console.error(e);
@@ -290,21 +324,20 @@
 
       async function loadReports() {
         try {
-          const from = document.getElementById("rep-from").value;
-          const to = document.getElementById("rep-to").value;
-          let qs = "";
-          if (from && to) qs = `?from=${from}&to=${to}`;
+          const from = document.getElementById("rep-from").value || getTodayDateStr();
+          const to = document.getElementById("rep-to").value || getTodayDateStr();
+          const qs = `?from=${from}&to=${to}`;
 
           const sumRes = await fetch("/api/v1/reports/sales-summary" + qs, {
             headers: AUTH_HEADER,
           });
           const sumData = await sumRes.json();
           document.getElementById("rep-total-orders").textContent =
-            sumData.TotalOrders;
+            sumData.total_orders;
           document.getElementById("rep-total-revenue").textContent =
-            `$${(sumData.TotalRevenue / 100).toFixed(2)}`;
+            `$${(sumData.total_revenue).toFixed(2)}`;
           document.getElementById("rep-avg-ticket").textContent =
-            `$${(sumData.AverageTicket / 100).toFixed(2)}`;
+            `$${(sumData.average_ticket).toFixed(2)}`;
 
           const topRes = await fetch("/api/v1/reports/top-products" + qs, {
             headers: AUTH_HEADER,
@@ -313,7 +346,7 @@
           const tbodyTop = document.querySelector("#top-products-table tbody");
           tbodyTop.innerHTML = "";
           (topData || []).forEach((p) => {
-            tbodyTop.innerHTML += `<tr><td>${p.Name}</td><td>${p.Quantity}</td><td>$${(p.Revenue / 100).toFixed(2)}</td></tr>`;
+            tbodyTop.innerHTML += `<tr><td>${p.name}</td><td>${p.quantity}</td><td>$${(p.revenue).toFixed(2)}</td></tr>`;
           });
 
           const lowRes = await fetch("/api/v1/reports/low-stock?threshold=5", {
@@ -332,12 +365,12 @@
 
       async function loadProducts() {
         try {
-          const res = await fetch("/api/v1/products");
+          const res = await fetch("/api/v1/products", { headers: AUTH_HEADER });
           const data = await res.json();
           const tbody = document.querySelector("#products-table tbody");
           tbody.innerHTML = "";
           (data || []).forEach((p) => {
-            tbody.innerHTML += `<tr><td>${p.id}</td><td>${p.name}</td><td>${p.sku}</td><td>$${(p.price_cents / 100).toFixed(2)}</td></tr>`;
+            tbody.innerHTML += `<tr><td>${p.id}</td><td>${p.name}</td><td>${p.category || '-'}</td><td>$${(p.price_cents / 100).toFixed(2)}</td></tr>`;
           });
         } catch (e) {
           console.error(e);
@@ -346,14 +379,25 @@
 
       async function loadCustomers() {
         try {
-          // Assuming we can get all customers or we just show a static list for now since we don't have a GET /customers all endpoint.
-          // We'll leave it empty.
-          const tbody = document.querySelector("#customers-table tbody");
-          tbody.innerHTML =
-            '<tr><td colspan="4" style="text-align:center;">Busque o añada un cliente</td></tr>';
+          const res = await fetch("/api/v1/customers", { headers: AUTH_HEADER });
+          if(res.ok) {
+              const data = await res.json();
+              const tbody = document.querySelector("#customers-table tbody");
+              tbody.innerHTML = "";
+              (data || []).forEach((c) => {
+                tbody.innerHTML += `<tr><td>${c.id}</td><td>${c.name}</td><td>${c.phone}</td><td>${c.email}</td></tr>`;
+              });
+          } else {
+              document.querySelector("#customers-table tbody").innerHTML = '<tr><td colspan="4" style="text-align:center;">Busque o añada un cliente</td></tr>';
+          }
         } catch (e) {
           console.error(e);
         }
+      }
+
+      async function loadCustomFields() {
+          const tbody = document.querySelector("#custom-fields-table tbody");
+          tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Disponible próximamente</td></tr>';
       }
 
       document.addEventListener("DOMContentLoaded", loadDashboard);

@@ -51,7 +51,7 @@ func (r *TablesRepository) Update(ctx context.Context, t *Table) error {
 func (r *TablesRepository) AssignOrder(ctx context.Context, tableID, orderID string) error {
 	tx, err := r.Pool.Begin(ctx)
 	if err != nil { return err }
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(context.Background())
 	
 	_, err = tx.Exec(ctx, "UPDATE orders SET table_id = $1 WHERE id = $2", tableID, orderID)
 	if err != nil { return err }

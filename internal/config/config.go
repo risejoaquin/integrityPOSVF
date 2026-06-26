@@ -12,9 +12,32 @@ type Config struct {
 	Printer      PrinterConfig      `yaml:"printer"`
 	WhatsApp     WhatsAppConfig     `yaml:"whatsapp"`
 	AI           AIConfig           `yaml:"ai"`
+	Auth         AuthConfig         `yaml:"auth"`
+	CORS         CORSConfig         `yaml:"cors"`
+	RateLimit    RateLimitConfig    `yaml:"rate_limit"`
 	CustomPath   string             `yaml:"custom_path"`
 	Modules      map[string]bool    `yaml:"modules"`
 	BusinessInfo BusinessInfoConfig `yaml:"business_info"`
+}
+
+type AuthConfig struct {
+	AdminUser     string `yaml:"admin_user"`
+	AdminPassword string `yaml:"admin_password"`
+}
+
+type CORSConfig struct {
+	Enabled          bool     `yaml:"enabled"`
+	AllowedOrigins   []string `yaml:"allowed_origins"`
+	AllowedMethods   []string `yaml:"allowed_methods"`
+	AllowedHeaders   []string `yaml:"allowed_headers"`
+	AllowCredentials bool     `yaml:"allow_credentials"`
+	MaxAge           int      `yaml:"max_age"`
+}
+
+type RateLimitConfig struct {
+	Enabled            bool `yaml:"enabled"`
+	RequestsPerMinute  int  `yaml:"requests_per_minute"`
+	CleanupIntervalMin int  `yaml:"cleanup_interval_min"`
 }
 
 type BusinessInfoConfig struct {
@@ -23,7 +46,9 @@ type BusinessInfoConfig struct {
 }
 
 type ServerConfig struct {
-	Port string `yaml:"port"`
+	Port         string `yaml:"port"`
+	ReadTimeout  int    `yaml:"read_timeout"`
+	WriteTimeout int    `yaml:"write_timeout"`
 }
 
 type DatabaseConfig struct {

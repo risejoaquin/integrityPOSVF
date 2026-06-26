@@ -21,3 +21,7 @@ func (p *NoopPrinter) OpenDrawer() error {
 	log.Printf("NoopPrinter: OpenDrawer called")
 	return nil
 }
+
+func (p *NoopPrinter) Ping() error {
+	return nil
+}

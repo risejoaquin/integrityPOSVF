@@ -1,87 +1,70 @@
-# integrityPOS by solidbit
+# IntegrityPOS
 
-integrityPOS es un sistema de punto de venta fijo y de grado industrial, diseñado con un enfoque Local-First, resiliencia operativa y pragmatismo absoluto. Desarrollado en Go (Golang) y PostgreSQL, sin dependencias de frameworks pesados o ORMs, interactuando directamente con el hardware y ofreciendo una interfaz web ultra rápida servida desde el propio binario.
+IntegrityPOS by SolidBit es un sistema de punto de venta fijo y de grado industrial, diseñado con arquitectura Clean Code, minimalismo y resiliencia operativa. Escrito puramente en Go (Golang) y usando PostgreSQL.
 
 ## Requisitos
 
-- **Go:** 1.22+
-- **Base de Datos:** PostgreSQL 15+
-- **Sistema Operativo:** Linux (ej. Raspberry Pi OS) o Windows (Desarrollo y pruebas)
+- **Go**: 1.22+
+- **PostgreSQL**: 15+
 
 ## Estructura del Proyecto
 
-El proyecto está diseñado usando Clean Architecture simplificada:
+- `cmd/posd/`: Punto de entrada del binario principal (servidor POS).
+- `cmd/builder/`: Herramienta de empaquetado/build.
+- `internal/`: Lógica interna (handlers, services, repositories, models).
+- `assets/`: Plantillas HTML y archivos estáticos.
+- `migrations/`: Scripts de migración SQL para PostgreSQL.
 
-- `cmd/`: Puntos de entrada para el servidor POS (`posd`) y el generador de instaladores (`builder`).
-- `internal/`: Lógica de negocio (servicios), acceso a datos (repositorios), manejadores de API y Web (handlers), y builder de instaladores.
-- `internal/module/`: Sistema de módulos extensibles (mesas, fidelización, etc.).
-- `assets/`: Plantillas HTML y recursos estáticos para el POS, segmentado por temas/verticales.
-- `migrations/`: Scripts SQL puros para la creación de esquemas.
+## Compilación
 
-## Instrucciones para Compilar
-
-```bash
-# Compilar el servidor POS
-go build -o posd ./cmd/posd
-
-# Compilar el generador de instaladores
-go build -o builder ./cmd/builder
-```
-
-## Instrucciones para Ejecutar en Desarrollo
-
-1. **Base de Datos:** Asegúrate de tener PostgreSQL corriendo y crea la base de datos `integritypos`.
-2. **Configuración:** Renombra o copia `.env.example` o ajusta el `config.yaml` con la URL de conexión a tu DB y credenciales necesarias.
-3. **Migraciones:** El sistema ejecuta automáticamente los scripts en la carpeta `migrations/` al iniciar si las tablas no existen.
-4. **Ejecutar:**
+Para compilar el binario principal:
 
 ```bash
-./posd
-# o en Windows: posd.exe
+go build -o posd.exe ./cmd/posd
 ```
 
-La aplicación estará disponible en `http://localhost:8080`.
-El panel de administración está en `http://localhost:8080/admin` (Autenticación requerida vía Bearer token en API o cabeceras para vistas web).
+Para compilar el builder:
 
-## Cómo usar el Builder
+```bash
+go build -o builder.exe ./cmd/builder
+```
 
-El Builder permite generar versiones personalizadas de integrityPOS para diferentes verticales (Restaurant, Retail, etc.) empaquetadas con módulos específicos.
+## Ejecución en Desarrollo
 
-1. Ejecuta el builder:
-   ```bash
-   ./builder
-   ```
-2. Abre tu navegador en `http://localhost:8081`.
-3. Selecciona la vertical, los módulos requeridos y haz clic en "Generar Instalador".
-4. Se descargará un archivo `.tar.gz` con el binario compilado (si estás en Windows generará `.exe`), las plantillas personalizadas, y un script de instalación (`install.sh` o `install.bat`).
+1. Clona el repositorio.
+2. Asegúrate de tener PostgreSQL ejecutándose.
+3. Copia `config.example.yaml` a `config.yaml` y configura los detalles de tu base de datos (DSN).
+4. Ejecuta las migraciones en tu base de datos (o confía en el flag automático si está habilitado).
+5. Ejecuta el servidor:
 
-## Pruebas
+```bash
+./posd.exe -config config.yaml
+```
 
-### Unitarias
-Se prueban los servicios sin depender de la base de datos, usando mocks internos en Go puro.
+La aplicación web estará disponible por defecto en el puerto configurado (ej: `http://localhost:8080/pos`).
+
+## Ejecución de Pruebas
+
+El sistema incluye pruebas unitarias y pruebas de integración usando mocks manuales y PostgreSQL.
+
+Para correr las pruebas unitarias:
+
 ```bash
 go test ./internal/service/...
 ```
 
-### Integración
-Requieren una base de datos de pruebas real.
+Para correr las pruebas de integración (requiere una base de datos de prueba separada):
+
 ```bash
-# Asegúrate de tener una base de datos 'integritypos_test' en PostgreSQL
-export INTEGRATION_TESTS=1
-export TEST_DB_DSN="postgres://postgres:postgres@localhost:5432/integritypos_test?sslmode=disable"
-go test ./internal/repository/...
+INTEGRATION_TESTS=1 go test ./internal/repository/...
 ```
 
-## Despliegue en Raspberry Pi (Linux)
-
-1. Transfiere el instalador (`.tar.gz`) generado por el builder a la Raspberry Pi.
-2. Descomprímelo: `tar -xzf integritypos_installer.tar.gz`
-3. Ejecuta el script de instalación con permisos de superusuario:
-   ```bash
-   sudo bash install.sh
-   ```
-4. Sigue las instrucciones y ajusta el `config.yaml` final.
+**Nota sobre Integración**:
+Las pruebas de integración buscan conectar a `postgres://localhost:5432/integritypos_test?sslmode=disable`. Asegúrate de crear esta base de datos antes de ejecutarlas:
+```sql
+CREATE DATABASE integritypos_test;
+```
 
 ## Licencia
 
-Propietaria - SolidBit
+Propietaria - Solidbit. Todos los derechos reservados.

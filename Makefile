@@ -31,3 +31,19 @@ lint:
 # Limpia binarios
 clean:
 	rm -rf bin/
+
+build-linux-arm64:
+	GOOS=linux GOARCH=arm64 go build -o bin/posd-arm64 ./cmd/posd
+
+build-all: build-pos build-builder build-linux-arm64
+
+package: build-all
+	mkdir -p dist/integritypos/bin
+	cp bin/posd dist/integritypos/bin/
+	cp bin/posd-arm64 dist/integritypos/bin/
+	cp bin/builder dist/integritypos/bin/
+	cp -r assets dist/integritypos/
+	cp -r migrations dist/integritypos/
+	cp config.example.yaml dist/integritypos/
+	tar -czvf integritypos-release.tar.gz -C dist integritypos
+	rm -rf dist

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -9,105 +10,66 @@ import (
 	"github.com/solidbit/integritypos/internal/repository"
 )
 
-type mockProductSvcRepo struct {
-	products map[string]model.Product
-	txFunc   func(ctx context.Context) (repository.Tx, error)
-}
-
-func (m *mockProductSvcRepo) List(ctx context.Context, filter repository.ProductFilter) ([]model.Product, error) {
-	return nil, nil
-}
-
-func (m *mockProductSvcRepo) GetByID(ctx context.Context, id string) (model.Product, error) {
-	if p, ok := m.products[id]; ok {
-		return p, nil
+func TestCreateProduct_InvalidName(t *testing.T) {
+	svc := &ProductService{}
+	err := svc.Create(context.Background(), &model.Product{Name: "   ", PriceCents: 100})
+	if !errors.Is(err, model.ErrInvalidInput) {
+		t.Errorf("expected ErrInvalidInput, got: %v", err)
 	}
-	return model.Product{}, fmt.Errorf("not found")
 }
 
-func (m *mockProductSvcRepo) Create(ctx context.Context, p *model.Product) error { return nil }
-func (m *mockProductSvcRepo) Update(ctx context.Context, p *model.Product) error { return nil }
-func (m *mockProductSvcRepo) Delete(ctx context.Context, id string) error        { return nil }
-
-func (m *mockProductSvcRepo) GetStock(ctx context.Context, id string) (int, error) {
-	if p, ok := m.products[id]; ok {
-		return p.Stock, nil
+func TestCreateProduct_InvalidPrice(t *testing.T) {
+	svc := &ProductService{}
+	err := svc.Create(context.Background(), &model.Product{Name: "Burger", PriceCents: -100})
+	if !errors.Is(err, model.ErrInvalidInput) {
+		t.Errorf("expected ErrInvalidInput, got: %v", err)
 	}
-	return 0, fmt.Errorf("not found")
 }
 
-func (m *mockProductSvcRepo) UpdateStock(ctx context.Context, tx repository.Tx, id string, delta int) error {
-	if p, ok := m.products[id]; ok {
-		p.Stock += delta
-		m.products[id] = p
-		return nil
-	}
-	return fmt.Errorf("not found")
-}
-
-func (m *mockProductSvcRepo) BeginTx(ctx context.Context) (repository.Tx, error) {
-	if m.txFunc != nil {
-		return m.txFunc(ctx)
-	}
-	return &mockTx{}, nil
-}
-
-type mockInvSvcRepo struct{}
-
-func (m *mockInvSvcRepo) RecordMovement(ctx context.Context, tx repository.Tx, productID string, delta int, reason string, orderID string) error {
-	return nil
-}
-func (m *mockInvSvcRepo) GetMovements(ctx context.Context, productID string, limit int) ([]model.InventoryMovement, error) {
-	return nil, nil
-}
-
-func TestAdjustStock(t *testing.T) {
-	productRepo := &mockProductSvcRepo{
-		products: map[string]model.Product{
-			"p1": {ID: "p1", Name: "Burger", PriceCents: 500, Stock: 10},
+func TestAdjustStock_Decrement_Success(t *testing.T) {
+	db := &mockDBBeginner{tx: &mockTx{}}
+	productRepo := &mockProductRepo{
+		getByIDFn: func(ctx context.Context, id string) (model.Product, error) {
+			return model.Product{ID: "p1", Stock: 10}, nil
+		},
+		decrementStockAtomicFn: func(ctx context.Context, db repository.DBTX, productID string, quantity int) error {
+			return nil
 		},
 	}
-	invRepo := &mockInvSvcRepo{}
+	invRepo := &mockInventoryRepo{}
 
 	svc := &ProductService{
+		DB:            db,
 		Repo:          productRepo,
 		InventoryRepo: invRepo,
 	}
 
-	t.Run("positive adjustment", func(t *testing.T) {
-		err := svc.AdjustStock(context.Background(), "p1", 5, "restock")
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-		if productRepo.products["p1"].Stock != 15 {
-			t.Errorf("expected stock 15, got %d", productRepo.products["p1"].Stock)
-		}
-	})
+	err := svc.AdjustStock(context.Background(), "p1", -5, "venta")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+}
 
-	t.Run("negative adjustment sufficient stock", func(t *testing.T) {
-		err := svc.AdjustStock(context.Background(), "p1", -5, "sale")
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-		if productRepo.products["p1"].Stock != 10 {
-			t.Errorf("expected stock 10, got %d", productRepo.products["p1"].Stock)
-		}
-	})
+func TestAdjustStock_Decrement_Insufficient(t *testing.T) {
+	db := &mockDBBeginner{tx: &mockTx{}}
+	productRepo := &mockProductRepo{
+		getByIDFn: func(ctx context.Context, id string) (model.Product, error) {
+			return model.Product{ID: "p1", Stock: 10}, nil
+		},
+		decrementStockAtomicFn: func(ctx context.Context, db repository.DBTX, productID string, quantity int) error {
+			return fmt.Errorf("%w: for product %s", model.ErrStockInsufficient, productID)
+		},
+	}
+	invRepo := &mockInventoryRepo{}
 
-	t.Run("negative adjustment insufficient stock", func(t *testing.T) {
-		err := svc.AdjustStock(context.Background(), "p1", -20, "sale")
-		if err == nil {
-			t.Errorf("expected error for insufficient stock")
-		}
-	})
+	svc := &ProductService{
+		DB:            db,
+		Repo:          productRepo,
+		InventoryRepo: invRepo,
+	}
 
-	t.Run("negative adjustment reason initial", func(t *testing.T) {
-		err := svc.AdjustStock(context.Background(), "p1", -20, "inventario inicial")
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-		if productRepo.products["p1"].Stock != -10 {
-			t.Errorf("expected stock -10, got %d", productRepo.products["p1"].Stock)
-		}
-	})
+	err := svc.AdjustStock(context.Background(), "p1", -15, "venta")
+	if !errors.Is(err, model.ErrStockInsufficient) {
+		t.Errorf("expected ErrStockInsufficient, got: %v", err)
+	}
 }

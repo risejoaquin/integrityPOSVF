@@ -1,0 +1,26 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: integritypos
+      POSTGRES_PASSWORD: solidbit
+      POSTGRES_DB: integritypos
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  pos:
+    build: .
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    environment:
+      - CONFIG_PATH=/app/config.yaml
+    volumes:
+      - ./config.example.yaml:/app/config.yaml
+      - ./custom:/opt/integritypos/custom
+      - ./migrations:/app/migrations
+volumes:
+  pgdata:

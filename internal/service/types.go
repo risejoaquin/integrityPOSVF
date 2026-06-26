@@ -19,4 +19,5 @@ type CustomerInfo struct {
 
 type TicketPrinter interface {
 	PrintTicket(order model.Order) error
+	Ping() error
 }

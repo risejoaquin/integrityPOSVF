@@ -3,31 +3,18 @@ package service
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/solidbit/integritypos/internal/model"
 	"github.com/solidbit/integritypos/internal/repository"
 )
 
-type ProductSvcRepository interface {
-	List(ctx context.Context, filter repository.ProductFilter) ([]model.Product, error)
-	GetByID(ctx context.Context, id string) (model.Product, error)
-	Create(ctx context.Context, p *model.Product) error
-	Update(ctx context.Context, p *model.Product) error
-	Delete(ctx context.Context, id string) error
-	GetStock(ctx context.Context, id string) (int, error)
-	UpdateStock(ctx context.Context, tx repository.Tx, productID string, delta int) error
-	BeginTx(ctx context.Context) (repository.Tx, error)
-}
-
-type InventorySvcRepository interface {
-	RecordMovement(ctx context.Context, tx repository.Tx, productID string, delta int, reason string, orderID string) error
-	GetMovements(ctx context.Context, productID string, limit int) ([]model.InventoryMovement, error)
-}
-
 type ProductService struct {
-	Repo          ProductSvcRepository
-	InventoryRepo InventorySvcRepository
+	DB            DBBeginner
+	Repo          ProductRepo
+	InventoryRepo InventoryRepo
 }
 
 func (s *ProductService) List(ctx context.Context, filter repository.ProductFilter) ([]model.Product, error) {
@@ -41,10 +28,10 @@ func (s *ProductService) GetByID(ctx context.Context, id string) (model.Product,
 func (s *ProductService) Create(ctx context.Context, p *model.Product) error {
 	p.Name = strings.TrimSpace(p.Name)
 	if p.Name == "" {
-		return fmt.Errorf("product name cannot be empty")
+		return fmt.Errorf("%w: product name cannot be empty", model.ErrInvalidInput)
 	}
 	if p.PriceCents < 0 {
-		return fmt.Errorf("product price cannot be negative")
+		return fmt.Errorf("%w: product price cannot be negative", model.ErrInvalidInput)
 	}
 	return s.Repo.Create(ctx, p)
 }
@@ -52,10 +39,10 @@ func (s *ProductService) Create(ctx context.Context, p *model.Product) error {
 func (s *ProductService) Update(ctx context.Context, p *model.Product) error {
 	p.Name = strings.TrimSpace(p.Name)
 	if p.Name == "" {
-		return fmt.Errorf("product name cannot be empty")
+		return fmt.Errorf("%w: product name cannot be empty", model.ErrInvalidInput)
 	}
 	if p.PriceCents < 0 {
-		return fmt.Errorf("product price cannot be negative")
+		return fmt.Errorf("%w: product price cannot be negative", model.ErrInvalidInput)
 	}
 	return s.Repo.Update(ctx, p)
 }
@@ -69,32 +56,45 @@ func (s *ProductService) AdjustStock(ctx context.Context, id string, delta int, 
 		return nil
 	}
 
-	tx, err := s.Repo.BeginTx(ctx)
+	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	var commitErr error
+	defer func() {
+		if commitErr != nil {
+			if rollbackErr := tx.Rollback(context.Background()); rollbackErr != nil {
+				log.Printf("error rolling back transaction: %v", rollbackErr)
+			}
+		}
+	}()
 
 	stock, err := s.Repo.GetStock(ctx, id)
 	if err != nil {
+		commitErr = err
 		return err
 	}
 
 	if stock+delta < 0 && reason != "inventario inicial" {
-		return fmt.Errorf("insufficient stock for product %s", id)
+		commitErr = fmt.Errorf("%w: for product %s", model.ErrStockInsufficient, id)
+		return commitErr
 	}
 
-	if err := s.Repo.UpdateStock(ctx, tx, id, delta); err != nil {
+	if err := s.Repo.DecrementStockAtomic(ctx, tx, id, -delta); err != nil {
+		commitErr = err
 		return err
 	}
 
 	if err := s.InventoryRepo.RecordMovement(ctx, tx, id, delta, reason, ""); err != nil {
+		commitErr = err
 		return err
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+	commitErr = tx.Commit(ctx)
+	if commitErr != nil {
+		return fmt.Errorf("failed to commit transaction: %w", commitErr)
 	}
 
 	return nil
 }
+
