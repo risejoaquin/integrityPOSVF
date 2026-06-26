@@ -172,7 +172,7 @@ func (h *ProductHandler) adjustStock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.svc.AdjustStock(r.Context(), id, req.Delta, req.Reason); err != nil {
+	if err := h.svc.AdjustStock(r.Context(), h.svc.DB, id, req.Delta, req.Reason); err != nil {
 		if errors.Is(err, model.ErrStockInsufficient) {
 			writeJSONError(w, http.StatusUnprocessableEntity, err.Error())
 			return

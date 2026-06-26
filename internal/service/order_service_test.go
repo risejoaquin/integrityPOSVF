@@ -85,7 +85,8 @@ type mockProductRepo struct {
 	decrementStockAtomicFn func(ctx context.Context, db repository.DBTX, productID string, quantity int) error
 	listFn                 func(ctx context.Context, filter repository.ProductFilter) ([]model.Product, error)
 	getByIDFn              func(ctx context.Context, id string) (model.Product, error)
-	createFn               func(ctx context.Context, p *model.Product) error
+	getStockFn             func(ctx context.Context, db repository.DBTX, id string) (int, error)
+	createFn               func(ctx context.Context, db repository.DBTX, p *model.Product) error
 	updateFn               func(ctx context.Context, p *model.Product) error
 	deleteFn               func(ctx context.Context, id string) error
 }
@@ -118,9 +119,16 @@ func (m *mockProductRepo) GetByID(ctx context.Context, id string) (model.Product
 	return model.Product{}, nil
 }
 
-func (m *mockProductRepo) Create(ctx context.Context, p *model.Product) error {
+func (m *mockProductRepo) GetStock(ctx context.Context, db repository.DBTX, id string) (int, error) {
+	if m.getStockFn != nil {
+		return m.getStockFn(ctx, db, id)
+	}
+	return 0, nil
+}
+
+func (m *mockProductRepo) Create(ctx context.Context, db repository.DBTX, p *model.Product) error {
 	if m.createFn != nil {
-		return m.createFn(ctx, p)
+		return m.createFn(ctx, db, p)
 	}
 	return nil
 }

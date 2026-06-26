@@ -126,15 +126,16 @@ func (r *ProductRepository) List(ctx context.Context, filter ProductFilter) ([]m
 	return products, nil
 }
 
-func (r *ProductRepository) Create(ctx context.Context, p *model.Product) error {
-	err := r.DB.QueryRow(ctx,
+func (r *ProductRepository) Create(ctx context.Context, db DBTX, p *model.Product) error {
+	err := db.QueryRow(ctx,
 		`INSERT INTO products (name, price_cents, category, stock, is_available, attributes)
-		 VALUES ($1, $2, $3, $4, $5, COALESCE($6, '{}'::jsonb))
+		 VALUES ($1, $2, $3, 0, $5, COALESCE($6, '{}'::jsonb))
 		 RETURNING id, created_at, updated_at`,
-		p.Name, p.PriceCents, p.Category, p.Stock, p.IsAvailable, p.Attributes).Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt)
+		p.Name, p.PriceCents, p.Category, p.IsAvailable, p.Attributes).Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("error creating product: %w", err)
 	}
+	p.Stock = 0
 	return nil
 }
 
@@ -153,7 +154,7 @@ func (r *ProductRepository) Update(ctx context.Context, p *model.Product) error 
 }
 
 func (r *ProductRepository) Delete(ctx context.Context, id string) error {
-	cmd, err := r.DB.Exec(ctx, `DELETE FROM products WHERE id=$1`, id)
+	cmd, err := r.DB.Exec(ctx, `UPDATE products SET is_available = false, updated_at = now() WHERE id=$1`, id)
 	if err != nil {
 		return fmt.Errorf("error deleting product: %w", err)
 	}
@@ -163,9 +164,9 @@ func (r *ProductRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *ProductRepository) GetStock(ctx context.Context, id string) (int, error) {
+func (r *ProductRepository) GetStock(ctx context.Context, db DBTX, id string) (int, error) {
 	var stock int
-	err := r.DB.QueryRow(ctx, `SELECT stock FROM products WHERE id=$1`, id).Scan(&stock)
+	err := db.QueryRow(ctx, `SELECT stock FROM products WHERE id=$1`, id).Scan(&stock)
 	if err != nil {
 		return 0, fmt.Errorf("error getting stock: %w", err)
 	}

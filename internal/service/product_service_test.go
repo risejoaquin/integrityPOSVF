@@ -29,8 +29,8 @@ func TestCreateProduct_InvalidPrice(t *testing.T) {
 func TestAdjustStock_Decrement_Success(t *testing.T) {
 	db := &mockDBBeginner{tx: &mockTx{}}
 	productRepo := &mockProductRepo{
-		getByIDFn: func(ctx context.Context, id string) (model.Product, error) {
-			return model.Product{ID: "p1", Stock: 10}, nil
+		getStockFn: func(ctx context.Context, db repository.DBTX, id string) (int, error) {
+			return 10, nil
 		},
 		decrementStockAtomicFn: func(ctx context.Context, db repository.DBTX, productID string, quantity int) error {
 			return nil
@@ -44,7 +44,7 @@ func TestAdjustStock_Decrement_Success(t *testing.T) {
 		InventoryRepo: invRepo,
 	}
 
-	err := svc.AdjustStock(context.Background(), "p1", -5, "venta")
+	err := svc.AdjustStock(context.Background(), db, "p1", -5, "venta")
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -53,8 +53,8 @@ func TestAdjustStock_Decrement_Success(t *testing.T) {
 func TestAdjustStock_Decrement_Insufficient(t *testing.T) {
 	db := &mockDBBeginner{tx: &mockTx{}}
 	productRepo := &mockProductRepo{
-		getByIDFn: func(ctx context.Context, id string) (model.Product, error) {
-			return model.Product{ID: "p1", Stock: 10}, nil
+		getStockFn: func(ctx context.Context, db repository.DBTX, id string) (int, error) {
+			return 10, nil
 		},
 		decrementStockAtomicFn: func(ctx context.Context, db repository.DBTX, productID string, quantity int) error {
 			return fmt.Errorf("%w: for product %s", model.ErrStockInsufficient, productID)
@@ -68,7 +68,7 @@ func TestAdjustStock_Decrement_Insufficient(t *testing.T) {
 		InventoryRepo: invRepo,
 	}
 
-	err := svc.AdjustStock(context.Background(), "p1", -15, "venta")
+	err := svc.AdjustStock(context.Background(), db, "p1", -15, "venta")
 	if !errors.Is(err, model.ErrStockInsufficient) {
 		t.Errorf("expected ErrStockInsufficient, got: %v", err)
 	}

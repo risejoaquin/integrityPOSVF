@@ -33,7 +33,26 @@ func (s *ProductService) Create(ctx context.Context, p *model.Product) error {
 	if p.PriceCents < 0 {
 		return fmt.Errorf("%w: product price cannot be negative", model.ErrInvalidInput)
 	}
-	return s.Repo.Create(ctx, p)
+
+	initialStock := p.Stock
+
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(context.Background())
+
+	if err := s.Repo.Create(ctx, tx, p); err != nil {
+		return err
+	}
+
+	if initialStock != 0 {
+		if err := s.AdjustStock(ctx, tx, p.ID, initialStock, "inventario inicial"); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (s *ProductService) Update(ctx context.Context, p *model.Product) error {
@@ -51,48 +70,26 @@ func (s *ProductService) Delete(ctx context.Context, id string) error {
 	return s.Repo.Delete(ctx, id)
 }
 
-func (s *ProductService) AdjustStock(ctx context.Context, id string, delta int, reason string) error {
+func (s *ProductService) AdjustStock(ctx context.Context, db repository.DBTX, id string, delta int, reason string) error {
 	if delta == 0 {
 		return nil
 	}
 
-	tx, err := s.DB.Begin(ctx)
+	stock, err := s.Repo.GetStock(ctx, db, id)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	var commitErr error
-	defer func() {
-		if commitErr != nil {
-			if rollbackErr := tx.Rollback(context.Background()); rollbackErr != nil {
-				log.Printf("error rolling back transaction: %v", rollbackErr)
-			}
-		}
-	}()
-
-	stock, err := s.Repo.GetStock(ctx, id)
-	if err != nil {
-		commitErr = err
 		return err
 	}
 
 	if stock+delta < 0 && reason != "inventario inicial" {
-		commitErr = fmt.Errorf("%w: for product %s", model.ErrStockInsufficient, id)
-		return commitErr
+		return fmt.Errorf("%w: for product %s", model.ErrStockInsufficient, id)
 	}
 
-	if err := s.Repo.DecrementStockAtomic(ctx, tx, id, -delta); err != nil {
-		commitErr = err
+	if err := s.Repo.DecrementStockAtomic(ctx, db, id, -delta); err != nil {
 		return err
 	}
 
-	if err := s.InventoryRepo.RecordMovement(ctx, tx, id, delta, reason, ""); err != nil {
-		commitErr = err
+	if err := s.InventoryRepo.RecordMovement(ctx, db, id, delta, reason, ""); err != nil {
 		return err
-	}
-
-	commitErr = tx.Commit(ctx)
-	if commitErr != nil {
-		return fmt.Errorf("failed to commit transaction: %w", commitErr)
 	}
 
 	return nil

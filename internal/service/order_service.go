@@ -29,7 +29,8 @@ type ProductRepo interface {
 	DecrementStockAtomic(ctx context.Context, db repository.DBTX, productID string, quantity int) error
 	List(ctx context.Context, filter repository.ProductFilter) ([]model.Product, error)
 	GetByID(ctx context.Context, id string) (model.Product, error)
-	Create(ctx context.Context, p *model.Product) error
+	GetStock(ctx context.Context, db repository.DBTX, id string) (int, error)
+	Create(ctx context.Context, db repository.DBTX, p *model.Product) error
 	Update(ctx context.Context, p *model.Product) error
 	Delete(ctx context.Context, id string) error
 }
@@ -39,6 +40,7 @@ type InventoryRepo interface {
 }
 
 type DBBeginner interface {
+	repository.DBTX
 	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
